@@ -143,7 +143,7 @@ class TyrantProtocol(protocol.Protocol):
         self.recv_fifo=[]
 
     def dataReceived(self, data):
-        print "Data recieved", repr(data)
+        #print "Data recieved", repr(data)
         self.bufer+=data
         while self.recv_fifo:
             d,bytes=self.recv_fifo[0]
@@ -158,7 +158,7 @@ class TyrantProtocol(protocol.Protocol):
     @defer.inlineCallbacks
     def sock_send(self, *args,**kwargs):
         """Pack arguments and send the buffer to the socket"""
-        print "Посылка -", args, kwargs
+        #print "Посылка -", args, kwargs
         sync = kwargs.pop('sync', True)
         # Send message to socket, then check for errors as needed.
         self.transport.write(_pack(*args))
@@ -173,7 +173,7 @@ class TyrantProtocol(protocol.Protocol):
     @defer.inlineCallbacks
     def recv(self, bytes):
         """Get given bytes from socket"""
-        print "Try to get bytes",bytes,repr(self.bufer)
+        #print "Try to get bytes",bytes,repr(self.bufer)
         if bytes < len(self.bufer):
             res = self.bufer[:bytes]
             self.bufer = self.bufer[bytes:]
@@ -181,7 +181,7 @@ class TyrantProtocol(protocol.Protocol):
         else:
             d = defer.Deferred()
             self.recv_fifo.append((d,bytes))
-            print self.recv_fifo
+            #print self.recv_fifo
             res = yield d
             defer.returnValue(res)
 
@@ -466,5 +466,6 @@ def test_proto():
     print res
     reactor.stop()
 
-test_proto()
-reactor.run()
+if __name__=='__main__':
+    test_proto()
+    reactor.run()

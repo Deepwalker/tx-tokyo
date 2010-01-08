@@ -64,17 +64,12 @@ def _parse_elem(elem, dbtype, sep=None):
 
     return elem
 
-class Tyrant(dict,TyrantProtocol):
-    """Main class of Tyrant implementation. Acts like a python dictionary,
-    so you can query object using normal subscript operations.
+class Tyrant(TyrantProtocol):
+    """Main class of Tyrant implementation. 
     """
 
     def __init__(self, separator=None, literal=False):
         """
-        Acts like a python dictionary. Params are:
-            
-        host: Tyrant Host address
-        port: Tyrant port number
         separator: If this parameter is set, you can put and get lists as
         values.
         literal: If is set string is returned instead of unicode
@@ -92,23 +87,24 @@ class Tyrant(dict,TyrantProtocol):
     @defer.inlineCallbacks
     def __contains__(self, key):
         try:
-            self.vsiz(key)
+            yield self.vsiz(key)
         except TyrantError:
-            return False
+            defer.returnValue(False)
         else:
-            return True
+            defer.returnValue(True)
 
     @defer.inlineCallbacks
     def __delitem__(self, key):
         try:
-            return self.proto.out(key)
+            res = yield self.out(key)
+            defer.returnValue(res)
         except TyrantError:
             raise KeyError(key)
 
     @defer.inlineCallbacks
     def __getitem__(self, key):
         try:
-            return _parse_elem(self.proto.get(key, self.literal), self.dbtype,
+            return _parse_elem(self.get(key, self.literal), self.dbtype,
                                self.separator)
         except TyrantError:
             raise KeyError(key)
@@ -132,7 +128,7 @@ class Tyrant(dict,TyrantProtocol):
 
     @defer.inlineCallbacks
     def __len__(self):
-        return self.proto.rnum()
+        return self.rnum()
 
     @defer.inlineCallbacks
     def __repr__(self):
@@ -142,16 +138,16 @@ class Tyrant(dict,TyrantProtocol):
     def __setitem__(self, key, value):
         if isinstance(value, dict):
             flat = _itertools.chain([key], *value.iteritems())
-            self.proto.misc('put', list(flat))
+            self.misc('put', list(flat))
             
         elif isinstance(value, (list, tuple)):
             assert self.separator, "Separator is not set"
 
             flat = self.separator.join(value)
-            self.proto.put(key, flat)
+            self.put(key, flat)
 
         else:
-            self.proto.put(key, value)
+            self.put(key, value)
 
 
     @defer.inlineCallbacks
@@ -161,26 +157,26 @@ class Tyrant(dict,TyrantProtocol):
         """
         opts = ((record_locking and TyrantProtocol.RDBXOLCKREC) |
                 (global_locking and TyrantProtocol.RDBXOLCKGLB))
-        return self.proto.ext(func, opts, key, value)
+        return self.ext(func, opts, key, value)
 
     @defer.inlineCallbacks
     def clear(self):
         """Used in order to remove all records of a remote database object"""
-        self.proto.vanish()
+        self.vanish()
 
     @defer.inlineCallbacks
     def concat(self, key, value, width=None):
         """Concatenate columns of the existing record"""
         if width is None:
-            self.proto.putcat(key, value)
+            self.putcat(key, value)
         else:
-            self.proto.putshl(key, value, width)
+            self.putshl(key, value, width)
 
     @defer.inlineCallbacks
     def get_size(self, key):
         """Get the size of the value of a record"""
         try:
-            return self.proto.vsiz(key)
+            return self.vsiz(key)
         except TyrantError:
             raise KeyError(key)
 
@@ -190,16 +186,16 @@ class Tyrant(dict,TyrantProtocol):
         The return value is the status message of the database.The message 
         format is a dictionary. 
         """ 
-        return dict(l.split('\t', 1) \
-                        for l in self.proto.stat().splitlines() if l)
+        stat = yield self.stat()
+        defer.returnValue(dict(l.split('\t', 1) for l in stat.splitlines() if l))
 
     @defer.inlineCallbacks
     def iterkeys(self):
         """Iterate keys using remote operations"""
-        self.proto.iterinit()
+        self.iterinit()
         try:
             while True:
-                yield self.proto.iternext()
+                yield self.iternext()
         except TyrantError:
             pass
 
@@ -222,7 +218,7 @@ class Tyrant(dict,TyrantProtocol):
         if not isinstance(keys, (list, tuple)):
             keys = list(keys)
 
-        self.proto.misc("outlist", keys, opts)
+        self.misc("outlist", keys, opts)
 
     @defer.inlineCallbacks
     def multi_get(self, keys, no_update_log=False):
@@ -231,7 +227,7 @@ class Tyrant(dict,TyrantProtocol):
         if not isinstance(keys, (list, tuple)):
             keys = list(keys)
 
-        rval = self.proto.misc("getlist", keys, opts)
+        rval = self.misc("getlist", keys, opts)
         
         if len(rval) <= len(keys):
             # 1.1.10 protocol, may return invalid results
@@ -246,7 +242,6 @@ class Tyrant(dict,TyrantProtocol):
                     for i in xrange(0, len(rval), 2))
         return d
 
-    @defer.inlineCallbacks
     def multi_set(self, items, no_update_log=False):
         """Store given records into database"""
         opts = (no_update_log and TyrantProtocol.RDBMONOULOG or 0)
@@ -258,17 +253,17 @@ class Tyrant(dict,TyrantProtocol):
                 v = self.separator.join(v)
             lst.extend((k, v))
 
-        self.proto.misc("putlist", lst, opts)
+        return self.misc("putlist", lst, opts)
 
     @defer.inlineCallbacks
     def get_int(self, key):
         """Get an integer for given key. Must been added by addint"""
-        return self.proto.getint(key)
+        return self.getint(key)
     
     @defer.inlineCallbacks
     def get_double(self, key):
         """Get a double for given key. Must been added by adddouble"""
-        return self.proto.getdouble(key)
+        return self.getdouble(key)
 
     @defer.inlineCallbacks
     def prefix_keys(self, prefix, maxkeys=None):
@@ -278,12 +273,12 @@ class Tyrant(dict,TyrantProtocol):
         if maxkeys is None:
             maxkeys = len(self)
 
-        return self.proto.fwmkeys(prefix, maxkeys)
+        return self.fwmkeys(prefix, maxkeys)
 
     @defer.inlineCallbacks
     def sync(self):
         """Synchronize updated content into database"""
-        self.proto.sync()
+        self.sync()
 
     @defer.inlineCallbacks
     def _get_query(self):
